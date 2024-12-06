@@ -118,9 +118,10 @@ def mod_needs_update(mod_id: str, path: Path) -> bool:
 
     return False
 
-def get_mod_update_list(mods: dict) -> dict:
-    mods_to_update = {}
-    for mod_name, mod_id in mods.items():
+def get_mod_update_list(mods_to_check: dict) -> dict:
+    log("Checking for missing mods")
+    outdated_mods = {}
+    for mod_name, mod_id in mods_to_check.items():
         mod_path = Path(A3_WORKSHOP_DIR, mod_id)
         if mod_path.exists():
             if mod_needs_update(mod_id, mod_path):
@@ -130,18 +131,20 @@ def get_mod_update_list(mods: dict) -> dict:
                 print(f"No update required for \"{mod_name}\" ({mod_id})... SKIPPING")
                 continue
 
-        mods_to_update[mod_name] = mod_id
+        outdated_mods[mod_name] = mod_id
 
-    return mods_to_update
+    return outdated_mods
 
-def update_mods(mods_to_update: dict, username: str, password: str) -> None:
+def update_mods(mods: dict, username: str, password: str) -> None:
+    log("Updating mods")
     steam_cmd_params  = f" +force_install_dir {A3_SERVER_DIR} +login {username} {password}"
-    for mod_name, mod_id in mods_to_update.items():
+    for mod_name, mod_id in mods.items():
         steam_cmd_params += f" +workshop_download_item {A3_WORKSHOP_ID} {mod_id} validate"
         print(f"Updating \"{mod_name}\" ({mod_id})")
     call_steamcmd(f"{steam_cmd_params}  +quit")
 
 def lowercase_workshop_dir() -> None:
+    log("Converting uppercase files/folders to lowercase...")
     def rename_all( root, items):
         for name in items:
             try:
@@ -157,6 +160,7 @@ def lowercase_workshop_dir() -> None:
 
 
 def create_mod_symlinks(mods: dict) -> None:
+    log("Creating symlinks...")
     for mod_name, mod_id in mods.items():
         link_path = f"{A3_MODS_DIR}/{mod_name}"
         real_path = f"{A3_WORKSHOP_DIR}/{mod_id}"
@@ -169,6 +173,7 @@ def create_mod_symlinks(mods: dict) -> None:
             print(f"Mod '{mod_name}' does not exist! ({real_path})")
 
 def update_server(username: str, password: str) -> None:
+    log(f"Updating A3 server ({A3_SERVER_ID})")
     update_command = (
         f"+force_install_dir {A3_GAME_INSTALL_DIR} "
         f"+login {username} {password} "
@@ -179,6 +184,7 @@ def update_server(username: str, password: str) -> None:
     call_steamcmd(update_command)
 
 def generate_cfg(mods: dict) -> None:
+    log("Generating config file...")
     config_mods = ""
     for mod_name in mods.keys():
         config_mods += fr"mods/{re.escape(mod_name)};"
@@ -209,9 +215,8 @@ def generate_cfg(mods: dict) -> None:
         config_file.writelines(lines)
 
 def start_server(params):
+    log("Start A3 server")
     os.system(f"cd {A3_SERVER_DIR} && ./arma3server {params}")
-
-#endregion
 
 def get_credentials() -> tuple[str, str]:
     print("A steam account owning arma3 is required to continue. Please log in to begin downloading.")
@@ -219,11 +224,15 @@ def get_credentials() -> tuple[str, str]:
     password = getpass.getpass(prompt="Steam Password ")
     return username, password
 
+#endregion
+
 if __name__ == "__main__":
 
     args = parser.parse_args()
     START_SERVER = args.startserver
-    if args.updateall:
+    UPDATE_ALL = args.updateall
+
+    if UPDATE_ALL:
         UPDATE_A3 = True
         UPDATE_MODS = True
     else:
@@ -231,34 +240,23 @@ if __name__ == "__main__":
         UPDATE_MODS = args.updatemods
 
     if UPDATE_A3:
-        log(f"Updating A3 server ({A3_SERVER_ID})")
         steam_user, steam_pass = get_credentials()
         update_server(steam_user, steam_pass)
 
-    elif UPDATE_MODS:
+    if UPDATE_MODS:
         html_modlist = find_modlist_html_file()
         mod_list = extract_modlist_from_html(html_modlist)
-        log("Checking for missing mods")
-        mod_update_list = get_mod_update_list(mod_list)
+        mods_to_update = get_mod_update_list(mod_list)
 
-        if mod_update_list:
-            log("Updating mods")
+        if mods_to_update:
             steam_user, steam_pass = get_credentials()
-            update_mods(mod_update_list, steam_user, steam_pass)
+            update_mods(mods_to_update, steam_user, steam_pass)
         else:
             print("All mods are up to-date")
 
-        log("Converting uppercase files/folders to lowercase...")
         lowercase_workshop_dir()
-
-        log("Creating symlinks...")
         create_mod_symlinks(mod_list)
-
-        log("Generating config file...")
         generate_cfg(mod_list)
-    else:
-        START_SERVER = True
 
     if START_SERVER:
-        log("Start A3 server")
         start_server(LAUNCH_PARAMETERS)
