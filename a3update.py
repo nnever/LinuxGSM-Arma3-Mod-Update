@@ -10,10 +10,11 @@ from pathlib import Path
 from datetime import datetime
 from urllib import request
 from argparse import ArgumentParser
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
 #region Configuration
-
+load_dotenv()
 parser = ArgumentParser()
 parser.add_argument('-u', "--updateall", action="store_true", help="Update game and mods")
 parser.add_argument('-ug', "--updategame", action="store_true", help="Only update mods")
@@ -220,8 +221,11 @@ def start_server(params):
 
 def get_credentials() -> tuple[str, str]:
     print("A steam account owning arma3 is required to continue. Please log in to begin downloading.")
-    username = input("Steam Username: ")
-    password = getpass.getpass(prompt="Steam Password ")
+    username = os.getenv('STEAM_USERNAME')
+    password = os.getenv('STEAM_PASSWORD')
+    if not username or not password:
+        username = input("Steam Username: ")
+        password = getpass.getpass(prompt="Steam Password ")
     return username, password
 
 #endregion
