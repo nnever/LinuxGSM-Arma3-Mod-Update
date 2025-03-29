@@ -6,11 +6,11 @@ import sys
 import re
 import shutil
 import getpass
+from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime
 from urllib import request
 from argparse import ArgumentParser
-from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
 #region Configuration
@@ -23,10 +23,10 @@ parser.add_argument('-s', "--startserver", action="store_true", help="Run server
 
 A3_SERVER_ID = "233780"
 A3_WORKSHOP_ID = "107410"
-STEAM_CMD = Path(Path.cwd(), "steam/steamcmd.sh")
+STEAM_CMD = Path(Path.cwd(), "Steam/steamcmd.sh")
 A3_GAME_INSTALL_DIR = Path(Path.cwd(), "arma3/install/")
 A3_SERVER_DIR = Path(Path.cwd(), "arma3/install/public")
-A3_WORKSHOP_DIR = Path(Path.cwd(),"arma3/install/steamapps/workshop/content/", A3_WORKSHOP_ID)
+A3_WORKSHOP_DIR = Path(Path.cwd(),"arma3/install/public/steamapps/workshop/content/", A3_WORKSHOP_ID)
 A3_MODS_DIR = Path(A3_SERVER_DIR, "mods")
 A3_SERVER_CFG = Path(A3_SERVER_DIR, "serverconfig/server.cfg")
 A3_SERVER_BASIC_CFG = Path(A3_SERVER_DIR, "serverconfig/basic.cfg")
@@ -131,14 +131,13 @@ def get_mod_update_list(mods_to_check: dict) -> dict:
             else:
                 print(f"No update required for \"{mod_name}\" ({mod_id})... SKIPPING")
                 continue
-
         outdated_mods[mod_name] = mod_id
-
+    print(outdated_mods)
     return outdated_mods
 
 def update_mods(mods: dict, username: str, password: str) -> None:
     log("Updating mods")
-    steam_cmd_params  = f" +force_install_dir {A3_SERVER_DIR} +login {username} {password}"
+    steam_cmd_params  = f" +force_install_dir {A3_SERVER_DIR} +login \"{username}\" \"{password}\""
     for mod_name, mod_id in mods.items():
         steam_cmd_params += f" +workshop_download_item {A3_WORKSHOP_ID} {mod_id} validate"
         print(f"Updating \"{mod_name}\" ({mod_id})")
@@ -160,6 +159,14 @@ def lowercase_workshop_dir() -> None:
         rename_all(root, files)
 
 
+def delete_old_symlinks():
+    log("Deleting old symlinks...")
+    for entry in os.listdir(A3_MODS_DIR):
+        entry_path = os.path.join(A3_MODS_DIR, entry)
+        if os.path.islink(entry_path):
+            os.unlink(entry_path)
+            print(f"Deleted old symlink '{entry_path}'...")
+
 def create_mod_symlinks(mods: dict) -> None:
     log("Creating symlinks...")
     for mod_name, mod_id in mods.items():
@@ -177,11 +184,10 @@ def update_server(username: str, password: str) -> None:
     log(f"Updating A3 server ({A3_SERVER_ID})")
     update_command = (
         f"+force_install_dir {A3_GAME_INSTALL_DIR} "
-        f"+login {username} {password} "
+        f"+login \"{username}\" \"{password}\" "
         f"+app_update 233780 validate "
         f"+quit"
         )
-
     call_steamcmd(update_command)
 
 def generate_cfg(mods: dict) -> None:
@@ -259,6 +265,7 @@ if __name__ == "__main__":
             print("All mods are up to-date")
 
         lowercase_workshop_dir()
+        delete_old_symlinks()
         create_mod_symlinks(mod_list)
         generate_cfg(mod_list)
 
